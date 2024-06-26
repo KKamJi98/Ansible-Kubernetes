@@ -1,0 +1,42 @@
+- name: Reset Kubernetes cluster
+  hosts: nodes
+  become: true
+  tasks:
+    - name: Reset kubeadm
+      command: kubeadm reset -f
+
+    - name: Flush iptables rules
+      command: iptables -F
+      ignore_errors: true
+
+    - name: Flush iptables NAT table
+      command: iptables -t nat -F
+      ignore_errors: true
+
+    - name: Flush iptables mangle table
+      command: iptables -t mangle -F
+      ignore_errors: true
+
+    - name: Delete all iptables chains
+      command: iptables -X
+      ignore_errors: true
+
+    - name: Remove CNI configurations
+      file:
+        path: /etc/cni/net.d
+        state: absent
+
+    - name: Remove Kubernetes configuration directory
+      file:
+        path: /etc/kubernetes
+        state: absent
+
+    - name: Remove Kubernetes .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: absent
+
+    - name: Remove etcd data directory
+      file:
+        path: /var/lib/etcd
+        state: absent

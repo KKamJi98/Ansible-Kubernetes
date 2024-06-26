@@ -1,0 +1,26 @@
+- name: Install Calico
+  hosts: master_nodes
+  become: true
+  tasks:
+    - name: Download Calico manifest
+      get_url:
+        url: https://docs.projectcalico.org/manifests/calico.yaml
+        dest: /usr/local/bin/calico.yaml
+
+    - name: Apply Calico manifest
+      command: kubectl apply -f /usr/local/bin/calico.yaml
+      register: calico_install
+
+    # - name: Configure Calico IP pool
+    #   shell: |
+    #     kubectl apply -f - <<EOF
+    #     apiVersion: crd.projectcalico.org/v1
+    #     kind: IPPool
+    #     metadata:
+    #       name: default-ipv4-ippool
+    #     spec:
+    #       cidr: 10.244.0.0/16
+    #       ipipMode: Always
+    #       natOutgoing: true
+    #     EOF
+    #   when: calico_install.changed

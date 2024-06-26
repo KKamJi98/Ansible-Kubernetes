@@ -1,0 +1,39 @@
+- name: Initialize Kubernetes Cluster
+  hosts: master_nodes
+  become: true
+  tasks:
+    - name: Initialize the Kubernetes cluster
+      command: kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address=10.0.0.100 --cri-socket=unix:///run/containerd/containerd.sock
+      register: kubeadm_init_output
+      ignore_errors: true
+
+    - name: Create .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: directory
+        mode: '0755'
+
+    - name: Copy admin.conf to user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ ansible_env.HOME }}/.kube/config"
+        remote_src: yes
+        owner: "{{ ansible_env.USER }}"
+        mode: '0644'
+      when: kubeadm_init_output.changed
+
+    - name: Generate join command
+      shell: kubeadm token create --print-join-command
+      register: join_command
+      when: kubeadm_init_output.changed
+
+    - name: Save join command to file
+      copy:
+        content: "{{ join_command.stdout }}"
+        dest: "{{ ansible_env.HOME }}/kubeadm_join_cmd.sh"
+      when: kubeadm_init_output.changed
+
+    - name: Output join command to console
+      debug:
+        msg: "{{ join_command.stdout }}"
+      when: kubeadm_init_output.changed

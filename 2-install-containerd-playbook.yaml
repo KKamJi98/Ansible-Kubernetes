@@ -1,0 +1,122 @@
+- name: Install containerd
+  hosts: nodes
+  become: true
+  tasks:
+    ## Step 2.1
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Load overlay module
+      ansible.builtin.shell: modprobe overlay
+      register: overlay_result
+
+    - name: Load br_netfilter module
+      ansible.builtin.shell: modprobe br_netfilter
+      register: br_netfilter_result
+
+    - name: Ensure sysctl params are set for Kubernetes
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+
+    - name: Apply sysctl params without reboot
+      ansible.builtin.shell: sysctl --system
+
+    - name: Verify br_netfilter module is loaded
+      ansible.builtin.shell: lsmod | grep br_netfilter
+      register: br_netfilter_check
+      failed_when: br_netfilter_check.rc != 0
+
+    - name: Verify overlay module is loaded
+      ansible.builtin.shell: lsmod | grep overlay
+      register: overlay_check
+      failed_when: overlay_check.rc != 0
+
+    - name: Verify sysctl settings
+      ansible.builtin.shell: |
+        sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward
+      register: sysctl_check
+      failed_when:
+        - sysctl_check.stdout.find('net.bridge.bridge-nf-call-iptables = 1') == -1
+        - sysctl_check.stdout.find('net.bridge.bridge-nf-call-ip6tables = 1') == -1
+        - sysctl_check.stdout.find('net.ipv4.ip_forward = 1') == -1
+
+    ## Step 2.2
+    - name: Add Docker's official GPG key
+      ansible.builtin.shell: |
+        apt-get update
+        apt-get install -y ca-certificates curl gnupg
+        install -m 0755 -d /etc/apt/keyrings
+        rm -f /etc/apt/keyrings/docker.gpg
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+
+    - name: Set up the Docker repository
+      ansible.builtin.shell: |
+        mkdir -p /etc/apt/keyrings
+        echo \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+          $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+          tee /etc/apt/sources.list.d/docker.list > /dev/null
+        apt-get update
+
+    - name: Install containerd.io
+      ansible.builtin.apt:
+        name: containerd.io
+        state: present
+
+    ## Step 2.3
+    - name: Setup containerd config directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Generate default containerd configuration
+      ansible.builtin.command:
+        cmd: "containerd config default"
+      register: containerd_default_config
+
+    - name: Save default containerd configuration to config.toml
+      ansible.builtin.copy:
+        dest: /etc/containerd/config.toml
+        content: "{{ containerd_default_config.stdout }}"
+
+    - name: Update sandbox_image in config.toml
+      ansible.builtin.replace:
+        path: /etc/containerd/config.toml
+        regexp: 'sandbox_image = ".*"'
+        replace: 'sandbox_image = "registry.k8s.io/pause:3.9"'
+
+    - name: Update SystemdCgroup in config.toml
+      ansible.builtin.replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+        
+    - name: Restart containerd
+      ansible.builtin.systemd:
+        name: containerd
+        state: restarted
+
+    - name: Create crictl config file
+      ansible.builtin.copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+        mode: '0644'
+
+    - name: Verify crictl configuration
+      ansible.builtin.command: crictl stats
+      register: crictl_stats
+      ignore_errors: yes
+
+    - name: Display crictl stats output
+      ansible.builtin.debug:
+        var: crictl_stats.stdout_lines
+      when: crictl_stats is defined and crictl_stats.stdout_lines is defined

@@ -1,0 +1,7 @@
+- name: Join Worker Nodes to Kubernetes Cluster
+  hosts: worker_nodes
+  become: true
+  tasks:
+    - name: Join the node to the cluster
+      command: kubeadm join 10.0.0.100:6443 --token n0r6ja.nofb9sigbx4yp0mu --discovery-token-ca-cert-hash sha256:a2683602717a4e622413dc0d1747eea00a0a7f6bf2fabd02c4ed7fe96743fe1c
+      register: join_command
