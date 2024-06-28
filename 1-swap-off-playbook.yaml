@@ -2,13 +2,15 @@
   hosts: nodes
   become: true
   tasks:
-    #Step 1
-    - name: Gather facts
+    - name: Gather facts      # Step 1
       ansible.builtin.setup:
+
 
     - name: Disable swap
       ansible.builtin.command: swapoff -a
       when: ansible_swaptotal_mb > 0
+      register: swapoff_result
+      changed_when: swapoff_result.rc != 0
 
     - name: Ensure swap is disabled in /etc/fstab
       ansible.builtin.replace:
