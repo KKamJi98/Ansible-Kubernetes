@@ -6,7 +6,7 @@ Ansible로 Kubernetes Cluster 구축하기 - <https://kkamji.net/posts/ansible-k
 ## Spec
 - Ansible                      - 2.16.3  
 - kubeadm, kubelet, kubectl    - 1.29.6  
-- Cilium                       - 1.15.5  
+- Calico                       - 3.25.0  
 - Ubuntu 24.04 (LTS)  
 - Hyper-V  
 - WSL2  
